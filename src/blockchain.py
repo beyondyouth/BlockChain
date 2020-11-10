@@ -1,116 +1,77 @@
 '''
-Author: your name
+Author: dong.zhili
 Date: 2020-11-03 14:21:56
-LastEditTime: 2020-11-04 21:42:07
+LastEditTime: 2020-11-10 16:49:22
 LastEditors: Please set LastEditors
 Description: In User Settings Edit
-FilePath: /lab2.1/src/blockchain.py
+FilePath: /BlockChain/src/blockchain.py
 '''
 import os
-import sys
-import time
-import math
 import pickle
-import hashlib
+
+from block import block
 from transaction import *
+
 
 class blockchain(object):
     """
     区块链类
-    区块结构
-    Timestamp:当前时间戳，也就是区块创建的时间
-    PrevBlockHash:前一个块的哈希，即父哈希
-    Hash:当前块的哈希
-    Data:区块存储的实际有效信息，也就是交易
-    Nonce:存储一个递增的数字，用于工作量证明
     """
+
+    DbFile = "blockchain.pickle"
+
     def __init__(self):
-        # self.temp = {}
+        """
+        构造函数
+        从数据库文件中读取self.BlockChainDB字典；若不存在则在空的self.BlockChainDB中添加一个创世区块
+        """
         # BlockChain是一个字典结构，键是block的hash，值是block对象
         self.BlockChainDB = {}
-        self.DbFile = "blockchain.pickle"
-        # self.temp['blocks'] = self.BlockChain
+        self.tip = None
         
-        # 从pickle文件读取区块链
         if os.path.exists(self.DbFile) and os.path.getsize(self.DbFile) > 0:
             with open(self.DbFile, "rb+") as f:
             # 两个字典，一个blocks，一个chainstate
                 self.BlockChainDB = pickle.load(f)
         else:
             # 如果读不到数据库文件
-            print("no existing blockchain found. Creating a new one...")
+            print("no existing blockchain found. You need creating a new one...")
+            return
             # 造创世区块
-            self.newGenesisBlock()
-            with open(self.DbFile, "wb+") as f:
-                # 将创世区块写入到数据库文件
-                pickle.dump(self.BlockChainDB, f)
+            # self.addGenesisBlock()
+        
         # tip保存最后一个块的哈希值
         self.tip = list(self.BlockChainDB.keys())[-1]
     
-    def proofOfWork(self, b):
-        """
-        工作量证明
-        参数：区块
-        返回：nonce和hash
-        """
-        targetBits = 18
-        target = 1 << (256 - targetBits)
-        hashInt = None
-        nonce = 0
-        data = None
-        # 不断递增nonce并计算哈希，直到符合条件
-        for nonce in range(sys.maxsize):
-            data = b['PrevBlockHash'] + b['Data'].encode("utf-8") + b['Timestamp'].to_bytes(10, 'little') \
-                + targetBits.to_bytes(10, 'little') + nonce.to_bytes(10, 'little')
-            hashStr = hashlib.sha256(data).hexdigest()
-            hashInt = int(hashStr, 16)
-            hash = hashStr.encode("utf-8")
-            
-            if hashInt < target:
-                print(hash)
-                break
-            else:
-                nonce = nonce + 1
-        b['Nonce'] = nonce
-        b['Hash'] = hash
-    
-    def newGenesisBlock(self):
+    def addGenesisBlock(self, TXs):
         """
         在空的区块链中添加一个创世区块
         """
-        block = {
-            'Timestamp': int(time.time()),
-            'PrevBlockHash': "".encode("utf-8"),
-            'Hash': None,
-            'Data': "Genesis Block",
-            'Nonce': 0,
-        }
-        self.proofOfWork(block)
-        self.BlockChainDB[block['Hash']] = block
+        b = block("".encode("utf-8"), TXs)
+        self.BlockChainDB[b.Hash] = b
+        with open(blockchain.DbFile, "wb+") as f:
+            # 将创世区块写入到数据库文件
+            f.seek(0, 0)
+            f.truncate()
+            pickle.dump(self.BlockChainDB, f)
+        self.tip = b.Hash
 
-    def addBlock(self, data):
+    def addBlock(self, TXs):
         """
         在区块链的最后添加一个普通区块
         参数：交易
         """
-        with open(self.DbFile, "rb+") as f:
+        with open(blockchain.DbFile, "rb+") as f:
             self.BlockChainDB = pickle.load(f)
             prevblock = self.BlockChainDB[self.tip]
-            block = {
-                'Timestamp': int(time.time()),
-                'PrevBlockHash': prevblock['Hash'],
-                'Hash': None,
-                'Data': data,
-                'Nonce': 0,
-            }
-            self.proofOfWork(block)
-            self.BlockChainDB[block['Hash']] = block
-            print(self.BlockChainDB)
+            b = block(prevblock.Hash, TXs)
+            self.BlockChainDB[b.Hash] = b
+            # print(self.BlockChainDB)
             # 调整文件指针到文件头，并清空文件
             f.seek(0, 0)
             f.truncate()
             pickle.dump(self.BlockChainDB, f)
-        self.tip = block['Hash']
+        self.tip = b.Hash
     
     def verifyBlockChain(self):
         """
@@ -119,25 +80,58 @@ class blockchain(object):
         # prevblockhash = self.BlockChainDB[self.tip]['PrevBlockHash']
         key = self.tip
 
-        while self.BlockChainDB[key]['Data'] != "Genesis Block":
-            if self.BlockChainDB[key]['PrevBlockHash'] != self.BlockChainDB[self.BlockChainDB[key]['PrevBlockHash']]['Hash']:
+        while self.BlockChainDB[key].Transaction != "Genesis Block":
+            if self.BlockChainDB[key].PrevBlockHash != self.BlockChainDB[self.BlockChainDB[key].PrevBlockHash].Hash:
                 print("there is a error block")
                 return False
             # 记录当前轮次的prevblockhash给下一轮使用
-            key = self.BlockChainDB[key]['PrevBlockHash']
+            key = self.BlockChainDB[key].PrevBlockHash
         return True
 
-if __name__ == '__main__':
-    # 定义一个区块链数组
-    bc = blockchain()
-
-    bc.addBlock("Send 1 BTC to Ivan")
-    bc.addBlock("Send 2 more BTC to Ivan")
-
-    for h,b in bc.BlockChainDB.items():
-        print("Prev. hash: %x\n", b['PrevBlockHash'])
-        print("Data: %s\n", b['Data'])
-        print("Hash: %x\n", b['Hash'])
+    def findUnspendableTXs(self, address):
+        """
+        在区块链上查找携带有未花费的收入的交易，并整理成列表返回
+        """
+        # 字典记录链上未花费的收入的交易，键值对为（交易ID，交易对象）
+        unspentTXs = {}
+        for h, b in self.BlockChainDB.items():
+            for tx in b.Transactions:
+                # 遍历交易的输出，找到所有收入，这个交易我可能在后面花掉，需要过滤
+                for i, TXout in enumerate(tx.TXOutputs):
+                    if isToAddress(TXout, address):
+                        unspentTXs[tx.ID] = tx
+                # 过滤时直接跳过Coinbase交易
+                if tx.isCoinbase():
+                    break
+                # 遍历tx.TXInputs找已经花费的收入
+                for TXin in tx.TXInputs:
+                    if isFromAddress(TXin, address):
+                        # 如果这个交易的支付者是address，则该交易的输入的txid指向的收入已经被花费
+                        del unspentTXs[TXin['TXid']]
+        return unspentTXs.values()
     
-    bc.verifyBlockChain()
-    
+    def findUnspendableTXOs(self, address):
+        """
+        返回未被花费的收入列表
+        """
+        UTXOs = []
+        unspendTXs = self.findUnspendableTXs(address)
+
+        for tx in unspendTXs:
+            for TXout in tx.TXOutputs:
+                if isToAddress(TXout, address):
+                    UTXOs.append(TXout)
+        return UTXOs
+
+    def getAvailableBalance(self, address):
+        """
+        返回可用余额
+        """
+        balance = 0.0
+        unspendTXs = self.findUnspendableTXs(address)
+
+        for tx in unspendTXs:
+            for TXout in tx.TXOutputs:
+                if isToAddress(TXout, address):
+                    balance += TXout['Value']
+        return balance

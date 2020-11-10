@@ -1,4 +1,6 @@
+/.vscode/
 /bin/
 blockchain.pickle
 /lib/
 pyvenv.cfg
+/src/__pycache__/
